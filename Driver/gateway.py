@@ -116,6 +116,8 @@ def do_flash_request(request):
                 [
                     "scp",
                     "main/program.s",
+                    "main/gdbinit",
+                    "main/script.gdb",
                     "program",
                     "orangepi@10.117.129.219:/creator/",
                 ],
@@ -150,35 +152,9 @@ def do_job_request(request):
         target_board = req_data["target_board"]
         asm_code = req_data["assembly"]
         req_data["status"] = ""
-
-        # create temporal assembly file
-        text_file = open("tmp_assembly.s", "w")
-        ret = text_file.write(asm_code)
-        text_file.close()
-
-        # transform th temporal assembly file
-        error = creator_build("tmp_assembly.s", "main/program.s")
-        if error != 0:
-            req_data["status"] += "Error adapting assembly file...\n"
-
-        # flashing steps...
-        if error == 0:
-            error = do_cmd_output(req_data, ["idf.py", "fullclean"])
-        if error == 0:
-            error = do_cmd_output(req_data, ["idf.py", "set-target", target_board])
-        if error == 0:
-            error = do_cmd_output(req_data, ["idf.py", "build"])
-        if error == 0:
-            error = do_cmd_output(req_data, ["idf.py", "-p", target_device, "flash"])
-        if error == 0:
-            error = do_cmd_output(
-                req_data, ["./gateway_monitor.sh", target_device, "50"]
-            )
-            error = do_cmd_output(req_data, ["cat", "monitor_output.txt"])
-            error = do_cmd_output(req_data, ["rm", "monitor_output.txt"])
-
-    except Exception as e:
-        req_data["status"] += str(e) + "\n"
+       # TODO: Decisions remote lab
+    except: 
+        pass
 
     return jsonify(req_data)
 
@@ -194,6 +170,24 @@ def do_stop_flash_request(request):
         req_data["status"] += str(e) + "\n"
 
     return jsonify(req_data)
+
+#(6) Start Debugging
+def do_debug(request):
+    req_data = request.get_json()
+    req_data["status"] = ""
+
+    try:
+        cmd = (
+            "source /home/orangepi/gdbgui-venv/bin/activate && "
+            "gdbgui creator/main/program --host 0.0.0.0 --port 5000 --no-browser "
+            "-g \"gdb -x creator/main/script.gdb\""
+        )
+        do_cmd(req_data, ["ssh", "orangepi@10.117.129.219", cmd])
+    except Exception as e:
+        req_data["status"] += str(e) + "\n"
+
+    return jsonify(req_data)
+  
 
 
 # Setup flask and cors:
@@ -240,6 +234,12 @@ def post_job():
 @cross_origin()
 def post_stop_flash():
     return do_stop_flash_request(request)
+
+# (6) POST /debug -> debug
+@app.route("/debug", methods=["POST"])
+@cross_origin()
+def post_debug():
+    return do_debug(request)
 
 
 # Run
