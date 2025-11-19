@@ -119,7 +119,7 @@ def do_flash_request(request):
                     "main/gdbinit",
                     "main/script.gdb",
                     "program",
-                    "orangepi@10.117.129.219:/creator/",
+                    "orangepi@10.117.129.219:/home/orangepi/creator",
                 ],
             )
 
@@ -175,18 +175,23 @@ def do_stop_flash_request(request):
 def do_debug(request):
     req_data = request.get_json()
     req_data["status"] = ""
+    
+    original_route = os.getcwd()
+    main_route = os.path.join(original_route, "main")
+    main_route_destino = "/home/orangepi/creator"
 
     try:
         cmd = (
-            "source /home/orangepi/gdbgui-venv/bin/activate && "
-            "gdbgui creator/main/program --host 0.0.0.0 --port 5000 --no-browser "
-            "-g \"gdb -x creator/main/script.gdb\""
+            f"source /home/orangepi/gdbgui-venv/bin/activate && "
+            f"gdbgui ~/creator/program --host 0.0.0.0 --port 5000 --no-browser "
+            f"-g \"gdb -ex 'set substitute-path {main_route} {main_route_destino}' -x ~/creator/script.gdb\""
         )
         do_cmd(req_data, ["ssh", "orangepi@10.117.129.219", cmd])
     except Exception as e:
         req_data["status"] += str(e) + "\n"
 
     return jsonify(req_data)
+
   
 
 
