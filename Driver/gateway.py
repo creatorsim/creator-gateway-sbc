@@ -24,6 +24,62 @@
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS, cross_origin
 import subprocess, os, signal
+import logging
+import webbrowser
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+process_holder = {}
+
+
+#### (*) Cleaning functions
+def do_fullclean_request(request):
+    """Full clean the build directory"""
+    try:
+        req_data = request.get_json()
+        target_device = req_data["target_port"]
+        req_data["status"] = ""
+        error = 0
+        # flashing steps...
+        if error == 0:
+            do_cmd_output(req_data, ["rm", "-f", "program"])
+        if error == 0:
+            req_data["status"] += "Full clean done.\n"
+    except Exception as e:
+        req_data["status"] += str(e) + "\n"
+    return jsonify(req_data)
+
+
+def do_eraseflash_request(request):
+    """Erase flash the target device"""
+    try:
+        req_data = request.get_json()
+        target_device = req_data["target_port"]
+        req_data["status"] = ""
+        # flashing steps...
+        error = 0
+        if error == 0:
+            command = "rm -rvf '~/creator/*'"
+
+            error = do_cmd_output(
+                req_data,
+                [
+                    "ssh",
+                    "orangepi@10.117.129.219",
+                    command
+                ],
+            )
+        if error == 0:
+            req_data["status"] += "Erase flash done.\n"
+        else:
+            logging.error("Error"+ error)    
+
+    except Exception as e:
+        req_data["status"] += str(e) + "\n"
+
+    return jsonify(req_data)
 
 
 # (1) Get form values
@@ -53,9 +109,11 @@ def creator_build(file_in, file_out):
         return -1
 
 
-def do_cmd(req_data, cmd_array):
+def do_cmd(req_data, cmd_array, name_process=None):
     try:
         result = subprocess.run(cmd_array, capture_output=False, timeout=60)
+        if name_process == "gdbgui" or name_process == "monitor":
+            process_holder[name_process] = result
     except:
         pass
 
@@ -72,13 +130,22 @@ def do_cmd_output(req_data, cmd_array):
         result = subprocess.run(
             cmd_array, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60
         )
-    except:
-        pass
+    except Exception as e:
+        logging.error("Error: " + str(e))
+        # Opcional: asignar error en req_data para indicar fallo
+        req_data["error"] = -1
+        req_data["status"] = req_data.get("status", "") + f"Exception: {str(e)}\n"
+        return req_data["error"]
 
-    if result.stdout != None:
-        req_data["status"] += result.stdout.decode("utf-8") + "\n"
-    if result.returncode != None:
+    if result.stdout is not None:
+        req_data["status"] = (
+            req_data.get("status", "") + result.stdout.decode("utf-8") + "\n"
+        )
+
+    if result.returncode is not None:
         req_data["error"] = result.returncode
+    else:
+        req_data["error"] = 0  # Por si no hay código de error
 
     return req_data["error"]
 
@@ -91,6 +158,11 @@ def do_flash_request(request):
         target_board = req_data["target_board"]
         asm_code = req_data["assembly"]
         req_data["status"] = ""
+
+        if "gdbgui" in process_holder:
+            logging.debug("Killing GDBGUI")
+            kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+            process_holder.pop("gdbgui", None)
 
         # create temporal assembly file
         text_file = open("tmp_assembly.s", "w")
@@ -136,7 +208,9 @@ def do_monitor_request(request):
         target_device = req_data["target_port"]
         req_data["status"] = ""
 
-        do_cmd(req_data, ["ssh", "orangepi@10.117.129.219", "/creator/program"])
+        do_cmd(
+            req_data, ["ssh", "orangepi@10.117.129.219", "/creator/program"], "program"
+        )
 
     except Exception as e:
         req_data["status"] += str(e) + "\n"
@@ -152,8 +226,8 @@ def do_job_request(request):
         target_board = req_data["target_board"]
         asm_code = req_data["assembly"]
         req_data["status"] = ""
-       # TODO: Decisions remote lab
-    except: 
+    # TODO: Decisions remote lab
+    except:
         pass
 
     return jsonify(req_data)
@@ -171,14 +245,62 @@ def do_stop_flash_request(request):
 
     return jsonify(req_data)
 
-#(6) Start Debugging
+
+# ()Kill debug processes
+def kill_all_processes(host, user, process_name):
+    if not process_name:
+        logging.error("El nombre del proceso no puede estar vacío.")
+        return 1
+    print(process_name)
+    # Comando remoto para matar procesos por nombre usando pkill -9 (kill -9)
+    remote_kill_cmd = f"pkill -9 -f {process_name}"
+    ssh_cmd_kill = ["ssh", f"{user}@{host}", remote_kill_cmd]
+
+    try:
+        result = subprocess.run(
+            ssh_cmd_kill, capture_output=True, text=True, timeout=30, check=False
+        )
+
+        if result.returncode != 0:
+            # pkill devuelve 1 si no encontró procesos, no es un error grave en general
+            if result.returncode == 1:
+                logging.warning(f"Not process founded '{process_name}' in {host}.")
+                return 1
+            logging.error(
+                f"Error killing process '{process_name}' in {host}. Output: {result.stderr.strip()}"
+            )
+            return result.returncode
+
+        logging.info(f"Process '{process_name}' eliminated in {host}.")
+        return 0
+
+    except subprocess.TimeoutExpired as e:
+        logging.error(f"Time exceded: {e}")
+        return 1
+
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return 1
+
+
+# (6) Start Debugging
 def do_debug(request):
     req_data = request.get_json()
     req_data["status"] = ""
-    
+
+    # if "gdbgui" in process_holder:
+    #     logging.debug("Killing GDBGUI")
+    #     kill_all_processes("10.117.129.219","orangepi","gdbgui")
+    #     process_holder.pop("gdbgui", None)
+    kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+
     original_route = os.getcwd()
     main_route = os.path.join(original_route, "main")
     main_route_destino = "/home/orangepi/creator"
+
+    url = "http://10.117.129.219:5000/"
+    webbrowser.open_new_tab(url)
+
 
     try:
         cmd = (
@@ -192,7 +314,22 @@ def do_debug(request):
 
     return jsonify(req_data)
 
-  
+
+# (7) Stop monitor and debug
+def do_stop_monitor_request(request):
+    """Shortcut for stopping Monitor / debug"""
+    try:
+        req_data = request.get_json()
+        req_data["status"] = ""
+        print("Killing Monitor")
+        error = kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+        if error == 0:
+            req_data["status"] += "Process stopped\n"
+
+    except Exception as e:
+        req_data["status"] += str(e) + "\n"
+
+    return jsonify(req_data)
 
 
 # Setup flask and cors:
@@ -240,11 +377,31 @@ def post_job():
 def post_stop_flash():
     return do_stop_flash_request(request)
 
+
 # (6) POST /debug -> debug
 @app.route("/debug", methods=["POST"])
 @cross_origin()
 def post_debug():
     return do_debug(request)
+
+
+# (7) Stop monitor
+@app.route("/stopmonitor", methods=["POST"])
+@cross_origin()
+def post_stop_monitor():
+    return do_stop_monitor_request(request)
+
+
+# (*) POST /fullclean -> clean build directory
+@app.route("/fullclean", methods=["POST"])
+@cross_origin()
+def post_fullclean_flash():
+    return do_fullclean_request(request)
+
+@app.route("/eraseflash", methods=["POST"])
+@cross_origin()
+def post_erase_flash():
+    return do_eraseflash_request(request)
 
 
 # Run
