@@ -1,4 +1,5 @@
 file ~/creator/main/program
-skip file ecall_macros.s
+source skip_lines.py
 b main
 run
+

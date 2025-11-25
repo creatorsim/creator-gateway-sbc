@@ -1,8 +1,9 @@
 CC = riscv64-linux-gnu-gcc
-CFLAGS = -march=rv64gc -mabi=lp64d -g -O2
+CFLAGS = -march=rv64gc -mabi=lp64d -g -O0
 
 ASM_SOURCES = program.s ecall_macros.s
 ASM_OBJS = $(ASM_SOURCES:.s=.o)
+
 C_SOURCES = ecall.c
 C_OBJS = $(C_SOURCES:.c=.o)
 
@@ -14,7 +15,7 @@ build: $(TARGET)
 	rm -f $(ASM_OBJS) $(C_OBJS)
 
 $(TARGET): $(ASM_OBJS) $(C_OBJS)
-	$(CC) $(ASM_OBJS) $(C_OBJS) -o $@ -static
+	$(CC) $(ASM_OBJS) $(C_OBJS) -o $@ -static -lc -lm
 
 %.o: %.s
 	$(CC) $(CFLAGS) -c $< -o $@
