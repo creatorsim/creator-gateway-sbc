@@ -45,7 +45,7 @@ def do_fullclean_request(request):
         error = 0
         # flashing steps...
         if error == 0:
-            do_cmd_output(req_data, ["make clean", "-C", "main"])
+            do_cmd_output(req_data, ["make", "-C", "./main", "clean"])
         if error == 0:
             req_data["status"] += "Full clean done.\n"
     except Exception as e:
@@ -58,15 +58,18 @@ def do_eraseflash_request(request):
     try:
         req_data = request.get_json()
         target_device = req_data["target_port"]
+        target_loc = req_data["target_location"]
         req_data["status"] = ""
         # flashing steps...
+        route = target_loc + "/*"
+
         error = 0
         if error == 0:
-            command = "rm -rvf '~/creator/*'"
+            command = f"rm -rvf {route}"
 
             error = do_cmd_output(
                 req_data,
-                ["ssh", "orangepi@10.117.129.219", command],
+                ["ssh", target_device, command],
             )
         if error == 0:
             req_data["status"] += "Erase flash done.\n"
@@ -99,12 +102,7 @@ def creator_build(file_in, file_out):
             fout.write(".globl main\n\n")
             fout.write('.include "ecall_macros.s"\n\n')
 
-
-
-            pattern = re.compile(r"\becall\b")  # palabra completa "ecall"
-
             for line in fin:
-                line = pattern.sub("ECALL", line)
                 fout.write(line)
 
         return 0
@@ -157,15 +155,18 @@ def do_cmd_output(req_data, cmd_array):
 # (2) Flasing assembly program into target board
 def do_flash_request(request):
     try:
+        print("AAAAA")
         req_data = request.get_json()
         target_device = req_data["target_port"]
         target_board = req_data["target_board"]
+        target_loc = req_data["target_location"]
         asm_code = req_data["assembly"]
         req_data["status"] = ""
-
+        user, host = target_device.split("@")
+        print("GDBGUI")
         if "gdbgui" in process_holder:
             logging.debug("Killing GDBGUI")
-            kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+            kill_all_processes(host, user, "gdbgui")
             process_holder.pop("gdbgui", None)
 
         # create temporal assembly file
@@ -177,7 +178,7 @@ def do_flash_request(request):
         error = creator_build("tmp_assembly.s", "main/program.s")
         if error != 0:
             req_data["status"] += "Error adapting assembly file...\n"
-
+        print("Make")
         # flashing steps...
         if error == 0:
             # Compile: CHECK HOW SAIL DOES THIS
@@ -193,7 +194,7 @@ def do_flash_request(request):
                     "scp",
                     "-r",
                     "main",
-                    "orangepi@10.117.129.219:~/creator",
+                    f"{target_device}:{target_loc}",
                 ],
             )
 
@@ -208,11 +209,10 @@ def do_monitor_request(request):
     try:
         req_data = request.get_json()
         target_device = req_data["target_port"]
+        target_loc = req_data["target_location"]
         req_data["status"] = ""
-
-        do_cmd(
-            req_data, ["ssh", "orangepi@10.117.129.219", "~/creator/main/program"], "program"
-        )
+        route = target_loc + "/main/program"
+        do_cmd(req_data, ["ssh", target_device, route], "program")
 
     except Exception as e:
         req_data["status"] += str(e) + "\n"
@@ -289,27 +289,30 @@ def kill_all_processes(host, user, process_name):
 def do_debug(request):
     req_data = request.get_json()
     req_data["status"] = ""
+    target_device = req_data["target_port"]
+    target_loc = req_data["target_location"]
+    user, host = target_device.split("@")
 
     # if "gdbgui" in process_holder:
     #     logging.debug("Killing GDBGUI")
     #     kill_all_processes("10.117.129.219","orangepi","gdbgui")
     #     process_holder.pop("gdbgui", None)
-    kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+    kill_all_processes(host, user, "gdbgui")
 
     original_route = os.getcwd()
     main_route = os.path.join(original_route, "main")
-    main_route_destino = "/home/orangepi/creator/main"
+    main_route_destino = target_loc + "/main"
 
-    url = "http://10.117.129.219:5000/"
+    url = f"http://{host}:5000/"
     webbrowser.open_new_tab(url)
 
     try:
         cmd = (
             f"source /home/orangepi/gdbgui-venv/bin/activate && "
-            f"gdbgui ~/creator/program --host 0.0.0.0 --port 5000 --no-browser "
-            f"-g \"gdb -ex 'set substitute-path {main_route} {main_route_destino}' -x ~/creator/main/script.gdb\""
+            f"gdbgui {target_loc}/main/program --host 0.0.0.0 --port 5000 --no-browser "
+            f"-g \"gdb -ex 'set substitute-path {main_route} {main_route_destino}' -x {target_loc}/main/script.gdb\""
         )
-        do_cmd(req_data, ["ssh", "orangepi@10.117.129.219", cmd])
+        do_cmd(req_data, ["ssh", target_device, cmd])
     except Exception as e:
         req_data["status"] += str(e) + "\n"
 
@@ -322,8 +325,12 @@ def do_stop_monitor_request(request):
     try:
         req_data = request.get_json()
         req_data["status"] = ""
+        target_device = req_data["target_port"]
+        user, host = target_device.split("@")
         print("Killing Monitor")
-        error = kill_all_processes("10.117.129.219", "orangepi", "gdbgui")
+        error = kill_all_processes(host, user, "program")
+        if error == 0:
+            error = kill_all_processes(host, user, "gdbgui")
         if error == 0:
             req_data["status"] += "Process stopped\n"
 
