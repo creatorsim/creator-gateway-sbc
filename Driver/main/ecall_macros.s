@@ -597,7 +597,7 @@ fmt_string: .ascii "%d.%d"
     li a7, 63       # syscall number for read
     li a0, 0        # fd 0 (stdin)
     la a1, buffer   # address of buffer
-    li a2, 2      # number of bytes to read
+    li a2, 1      # number of bytes to read
     .word 0x00000073
     lb a0, buffer
     j 13f

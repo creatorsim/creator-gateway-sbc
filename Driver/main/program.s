@@ -5,28 +5,35 @@
 .include "ecall_macros.s"
 
 
-
 #
 # Creator (https://creatorsim.github.io/creator/)
 #
 
-.data
-    msg:      .string "Hello "
-    .align  2          # alinea siguiente dato a 4 bytes (para float)
-    number:   .float 2.3
-    .align  3          # alinea siguiente dato a 8 bytes (para double)
-    number_d: .double 3.4
-
-
 .text
-main:
 
-    # Write double
-    li a7, 7
+main:
+    addi sp, sp, -4
+    sw ra, 0(sp)
+
+    li   a0, 23
+    li   a1, -77
+    li   a2, 45
+    jal  x1, sum
+    jal  x1, sub
+    li   a7, 1
     ecall
-    
-    li a7,3
-    ecall
-    
-    # return 
+
+    lw ra, 0(sp)
+    addi sp, sp, 4
+    jr ra
+
+sum:
+    add  t1, a0, a1
+    add  t2, a2, a2
+    add  a0, t1, zero
+    add  a1, t2, zero
+    jr   ra  
+
+sub:
+    sub a0, a0, a1
     jr ra
