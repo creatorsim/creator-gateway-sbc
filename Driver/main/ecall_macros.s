@@ -91,9 +91,18 @@ fmt_string: .ascii "%d.%d"
 #ifdef RISCV64_ORANGEPIRV2
 .macro ecall
     addi zero, zero, 16
-    addi sp, sp, -16
-    sd ra, 0(sp)
-    sd s0, 8(sp)
+    addi sp, sp, -72     # Reservar 72 bytes
+
+    sd ra, 0(sp)         # Guardar ra
+    sd s0, 8(sp)         # Guardar s0
+
+    sd t0, 16(sp)        # Guardar temporales
+    sd t1, 24(sp)
+    sd t2, 32(sp)
+    sd t3, 40(sp)
+    sd t4, 48(sp)
+    sd t5, 56(sp)
+    sd t6, 64(sp)
                 
 
     mv t0, a7              
@@ -629,7 +638,16 @@ fmt_string: .ascii "%d.%d"
 13:        
     ld ra, 0(sp)
     ld s0, 8(sp)
-    addi sp, sp, 16
+
+    ld t0, 16(sp)
+    ld t1, 24(sp)
+    ld t2, 32(sp)
+    ld t3, 40(sp)
+    ld t4, 48(sp)
+    ld t5, 56(sp)
+    ld t6, 64(sp)
+
+    addi sp, sp, 72
 
 .endm
 #endif
