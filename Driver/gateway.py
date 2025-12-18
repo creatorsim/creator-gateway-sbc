@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 
-#
-#  Copyright 2022-2024 Felix Garcia Carballeira, Diego Carmarmas Alonso, Alejandro Calderon Mateos, Elisa Utrilla Arroyo
+#  Copyright 2022-2025 CREATOR Team.
 #  This file is part of CREATOR.
 #
 #  CREATOR is free software: you can redistribute it and/or modify
@@ -17,13 +16,13 @@
 #
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with CREATOR.  If not, see <http://www.gnu.org/licenses/>.
-#
 
 
 import socket
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS, cross_origin
 import subprocess, os, signal
+import shutil
 import logging
 import webbrowser
 import re
