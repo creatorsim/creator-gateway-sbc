@@ -1,7 +1,7 @@
 # creator-sbc-driver
 CREATOR gateway driver for Linux-based RISC-V SBCs.
 
-[Documentation](https://creatorsim.github.io/creator-wiki/web/gateway.md#executing-the-sbc-gateway).
+[Documentation](https://creatorsim.github.io/creator-wiki/web/gateway.html#executing-the-sbc-gateway).
 
 
 ## Development
