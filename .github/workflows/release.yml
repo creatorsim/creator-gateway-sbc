@@ -1,0 +1,52 @@
+name: Release latest gateway version
+
+on:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Package gateway
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zip gateway
+        uses: actions/checkout@v5
+      - name: Package gateway
+        run: |
+          cd Driver && zip -9rq ../sbc.zip .
+      - name: Upload gateway
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbc
+          path: sbc.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: [package]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Delete latest tag
+        run: gh release delete latest --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish release
+        run: |
+          gh release create latest artifacts/sbc.zip \
+            --title "CREATOR SBC Gateway" \
+            --latest \
+            --target ${{ github.sha }} \
+            --notes "Latest version of the CREATOR SBC gateway"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
