@@ -15,8 +15,8 @@ jobs:
         uses: actions/checkout@v5
       - name: Package gateway
         run: |
-          cp LICENSE Driver
-          cd Driver && zip -9rq ../sbc.zip .
+          cp LICENSE driver
+          cd driver && zip -9rq ../sbc.zip .
       - name: Upload gateway
         uses: actions/upload-artifact@v4
         with:
